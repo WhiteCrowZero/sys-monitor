@@ -1,0 +1,110 @@
+<!-- templates/alert.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统警告报告</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            background: #fff;
+            border-radius: 6px;
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 20px;
+            color: #e74c3c;
+            margin-bottom: 10px;
+        }
+
+        .section {
+            margin-bottom: 15px;
+        }
+
+        .section h2 {
+            font-size: 16px;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .metric {
+            font-size: 14px;
+        }
+
+        .metric span.label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>系统警戒报告</h1>
+
+    <div class="section">
+        <h2>CPU 使用率告警</h2>
+        {% if cpu_usage >= cpu_threshold %}
+        <div class="metric">
+            <span class="label">当前使用率：</span> {{ cpu_usage }}%
+        </div>
+        <div class="metric">
+            <span class="label">警戒阈值：</span> {{ cpu_threshold }}%
+        </div>
+        {% else %}
+        <div class="metric">无异常</div>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>内存使用率告警</h2>
+        {% if mem_usage >= mem_threshold %}
+        <div class="metric">
+            <span class="label">当前使用率：</span> {{ mem_usage }}%
+        </div>
+        <div class="metric">
+            <span class="label">警戒阈值：</span> {{ mem_threshold }}%
+        </div>
+        {% else %}
+        <div class="metric">无异常</div>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h2>磁盘分区告警</h2>
+        {% if disk_alerts and disk_alerts | length > 0 %}
+        {% for dev in disk_alerts %}
+        <div class="metric">
+            <span class="label">{{ dev.partition }}：</span>
+            当前 {{ dev.percent }}% / 阈值 {{ dev.threshold }}%
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="metric">无异常</div>
+        {% endif %}
+    </div>
+
+    <div class="footer">
+        报告生成时间：{{ report_time }}
+    </div>
+</div>
+
+</body>
+</html>
