@@ -1,7 +1,9 @@
 import os
+from hashlib import sha256
+
 from jinja2 import Template
 import time
-from monitor.config import EMAIL_CONFIG, USE_THRESHOLD, CHART_OUTPUT_PATH, TEMPLATE_HTML_PATH
+from monitor.config import EMAIL_CONFIG, USE_THRESHOLD, CHART_OUTPUT_PATH, TEMPLATE_HTML_PATH, SECRET_KEY
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from typing import List, Dict, Optional
 from monitor.utils.make_chart import generate_all_chart
@@ -108,3 +110,48 @@ async def send_info_email(
         tpl = Template(f.read())
     body_html = tpl.render(**data)
     await send_report_email(subject, recipients, body_html, inline_images=charts)
+
+
+def verify_signature(recipients: List[str], timestamp: int, signature: str) -> bool:
+    """
+    签名校验：signature = sha256(secret + recipients_str + timestamp)
+    """
+    recipients_str = ",".join(sorted(recipients))
+    base = f"{SECRET_KEY}{recipients_str}{timestamp}"
+    expected_signature = sha256(base.encode("utf-8")).hexdigest()
+    # 时间戳不能过旧（防止重放攻击）
+    if abs(time.time() - timestamp) > 300:
+        return False
+    return expected_signature == signature
+
+
+def generate_email_request(
+        recipients: List[str],
+        secret_key: str
+) -> Dict[str, object]:
+    """
+    返回一个 dict，包含 recipients、timestamp、signature，
+    正好可以当作 POST /report/email 的 JSON 请求体。
+    """
+    # 1. 排序、拼接收件人
+    recipients_str = ",".join(sorted(recipients))
+    # 2. 当前时间戳（秒）
+    timestamp = int(time.time())
+    # 3. 计算签名
+    raw = f"{secret_key}{recipients_str}{timestamp}"
+    signature = sha256(raw.encode("utf-8")).hexdigest()
+    # 4. 返回请求体
+    return {
+        "recipients": recipients,
+        "timestamp": timestamp,
+        "signature": signature
+    }
+
+
+if __name__ == '__main__':
+    import requests
+
+    payload = generate_email_request(["13820826029@163.com"], SECRET_KEY)
+    resp = requests.post("http://127.0.0.1:8001/api/report/email", json=payload)
+    print(resp)
+    print(resp.text)

@@ -4,8 +4,9 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -22,7 +23,7 @@ from monitor.collector.network import NetworkCollector
 from monitor.collector import system_command, log_reader
 from monitor.collector.senior import SeniorCollector
 from monitor.config import USE_THRESHOLD, EMAIL_REPORT_TIME, RECIPIENTS
-from monitor.utils.send_mail import send_alert_email, send_info_email
+from monitor.utils.send_mail import send_alert_email, send_info_email, verify_signature
 from monitor.utils.os_info import get_os_info
 
 # —— 初始化监控收集器 —— #
@@ -34,11 +35,19 @@ senior = SeniorCollector()
 # —— CORS 设置 —— #
 origins = ["*"]
 
-
 # ================= 邮件警告 =================
+# 全局变量，记录上次发送的时间戳
+_last_alert_time: float = 0.0
+
 
 # —— 定时任务函数 —— #
 async def check_and_alert():
+    global _last_alert_time
+    now = time.time()
+    # 如果上一次发送时间距今不到 30 分钟，跳过
+    if now - _last_alert_time < 30 * 60:
+        return
+
     data = get_os_info()
     cpu_data = data['cpu']["cpu_percent_overall"]
     cpu_flag = cpu_data > USE_THRESHOLD["cpu"]
@@ -47,19 +56,21 @@ async def check_and_alert():
     memory_flag = memory_data > USE_THRESHOLD["memory"]
 
     disk_data = data['disk']
+    disk_flag = False
     for item in disk_data.values():
         if item.get("percent", 0) > USE_THRESHOLD["disk"]:
             disk_flag = True
             break
-    else:
-        disk_flag = False
 
     if cpu_flag or memory_flag or disk_flag:
+        # 更新上次发送时间
+        await send_alert_email(recipients=RECIPIENTS)
+        _last_alert_time = now
+        # 发送警告邮件
         await send_alert_email(
             recipients=RECIPIENTS,
         )
         print(f"[!] 发送邮件警告: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}", flush=True)
-        await asyncio.sleep(60 * 30)  # 防止频繁发送邮件
 
 
 async def daily_info_report():
@@ -74,24 +85,28 @@ async def daily_info_report():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
-    # 1) 每 60 秒检查一次警戒
+
+    # 告警，每分钟跑一次，若错过可容忍 30 分钟误差
     scheduler.add_job(
-        func=check_and_alert,
+        check_and_alert,
         trigger=IntervalTrigger(seconds=60),
         id="check_alert_job",
-        replace_existing=True
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=60
     )
-    # 2) 每天指定时间发送报告（CronTrigger 用法）
+    # 日报，每天固定时刻
     hour, minute = map(int, EMAIL_REPORT_TIME.split(":"))
     scheduler.add_job(
-        func=daily_info_report,
+        daily_info_report,
         trigger=CronTrigger(hour=hour, minute=minute),
         id="daily_report_job",
         replace_existing=True
     )
     scheduler.start()
     yield
-    scheduler.shutdown(wait=False)
+    scheduler.shutdown()
 
 
 # —— 创建应用 —— #
@@ -106,6 +121,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+
+# =============== 对外邮件接口 ===============
+
+# 请求体模型
+class EmailRequest(BaseModel):
+    recipients: List[EmailStr]
+    timestamp: int
+    signature: str
+
+
+# —— 路由 —— #
+router = APIRouter()
+
+
+@router.post("/report/email")
+async def send_email(req: EmailRequest):
+    """发送定时报告邮件，含验签"""
+    if not verify_signature(req.recipients, req.timestamp, req.signature):
+        raise HTTPException(status_code=403, detail="签名验证失败")
+
+    await send_info_email(recipients=req.recipients)
+    return {"message": "邮件发送成功"}
+
+
+app.include_router(router, prefix="/api")
 
 
 # =============== 基础监控接口 ===============
