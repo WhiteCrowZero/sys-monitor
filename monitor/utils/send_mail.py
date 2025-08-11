@@ -1,14 +1,64 @@
 import os
 from hashlib import sha256
-
 from jinja2 import Template
 import time
-from monitor.config import EMAIL_CONFIG, USE_THRESHOLD, CHART_OUTPUT_PATH, TEMPLATE_HTML_PATH, SECRET_KEY
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from typing import List, Dict, Optional
 from monitor.utils.make_chart import generate_all_chart
 from monitor.utils.os_info import get_os_info
 import logging
+
+# 邮件配置
+EMAIL_CONFIG = {
+    "host": "smtp.163.com",
+    "username": "13820826029@163.com",
+    "password": "JBx8sk3ARxSULPvU",  # 授权码
+    "from": "13820826029@163.com",  # 发件人邮箱
+    "port": 465,
+}
+
+# 每日报告时间
+EMAIL_REPORT_TIME = "15:30"
+
+# 收件人列表
+# RECIPIENTS = ["3633850267@qq.com","2475592761@qq.com", "812808597@qq.com"]
+RECIPIENTS = ["3633850267@qq.com", "2475592761@qq.com"]
+# RECIPIENTS = ["3633850267@qq.com"]
+
+# 邮件相关文件配置路径
+CHART_OUTPUT_PATH = "/root/shared-nvme/TZB2025/sys_monitor/monitor/templates/charts"
+# CHART_OUTPUT_PATH = r"D:\ComputerScience\Python\temp\system-monitor\monitor\templates\charts"
+TEMPLATE_HTML_PATH = "/root/shared-nvme/TZB2025/sys_monitor/monitor/templates"
+# TEMPLATE_HTML_PATH = r"D:\ComputerScience\Python\temp\system-monitor\monitor\templates"
+
+# 警戒线配置（百分比）
+USE_THRESHOLD = {
+    "cpu": 90,
+    "disk": 95,
+    "memory": 90,
+    # "network": 90,    # 网络暂时不监控
+}
+
+# 验签密钥
+SECRET_KEY = "jb10086"
+
+
+def get_default_config():
+    """安全的默认配置"""
+    return {
+        "alert_recipients": [],
+        "report_recipients": [],
+        "thresholds": {"cpu": 80, "memory": 85, "disk": 90},
+        "report_time": "08:00",
+        "report_content": {
+            "cpu": True,
+            "memory": True,
+            "disk": True,
+            "network": False,
+            "processes": False
+        }
+    }
+
 
 # 配置日志
 logger = logging.getLogger("monitor.mail")

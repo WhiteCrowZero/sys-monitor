@@ -89,6 +89,7 @@
             </tr>
         </table>
         <h3>各核使用率</h3>
+        <i><p>如果核心过多，则只展示前 9 个。其余核心情况请前往控制台或服务器查看详情。</p></i>
         <table>
             <tr>
                 {% for i in range(cpu.cpu_percent_per_core|length) %}
