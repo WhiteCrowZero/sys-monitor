@@ -66,6 +66,7 @@ async def check_and_alert():
 
     if cpu_flag or memory_flag or disk_flag:
         # 更新上次发送时间
+        await send_alert_email(recipients=RECIPIENTS)
         _last_alert_time = now
         # 发送警告邮件
         await send_alert_email(
@@ -160,7 +161,7 @@ app.include_router(router, prefix="/api")
 
 # =============== 基础监控接口 ===============
 
-@app.get("/metrics")
+@app.post("/metrics")
 async def metrics():
     """综合 CPU、磁盘、网络监控数据"""
     return get_os_info()
@@ -168,13 +169,13 @@ async def metrics():
 
 # =============== CPU 监控接口 ===============
 
-@app.get("/metrics/cpu/top")
+@app.post("/metrics/cpu/top")
 async def cpu_top(n: int = Query(5, ge=1, le=100)) -> List[Dict[str, Any]]:
     """返回占用 CPU 最高的 n 个进程"""
     return cpu.top(n)
 
 
-@app.get("/metrics/cpu/recent")
+@app.post("/metrics/cpu/recent")
 async def cpu_recent(n: int = Query(5, ge=1, le=100)) -> List[Dict[str, Any]]:
     """返回最近创建的 n 个进程"""
     return cpu.recent(n)
@@ -182,7 +183,7 @@ async def cpu_recent(n: int = Query(5, ge=1, le=100)) -> List[Dict[str, Any]]:
 
 # =============== 磁盘监控接口 ===============
 
-@app.get("/metrics/disk/top")
+@app.post("/metrics/disk/top")
 async def disk_top(
         n: int = Query(5, ge=1, le=100),
         path: str = Query('/', min_length=1)
@@ -191,7 +192,7 @@ async def disk_top(
     return disk.top(n, path)
 
 
-@app.get("/metrics/disk/recent")
+@app.post("/metrics/disk/recent")
 async def disk_recent(
         n: int = Query(5, ge=1, le=100),
         path: str = Query('/', min_length=1)
@@ -202,13 +203,13 @@ async def disk_recent(
 
 # =============== 网络监控接口 ===============
 
-@app.get("/metrics/network/top")
+@app.post("/metrics/network/top")
 async def network_top(n: int = Query(5, ge=1, le=100)) -> List[Dict[str, Any]]:
     """返回网络 I/O 最多的 n 个进程"""
     return net.top(n)
 
 
-@app.get("/metrics/network/recent")
+@app.post("/metrics/network/recent")
 async def network_recent(n: int = Query(5, ge=1, le=100)) -> List[Dict[str, Any]]:
     """返回最近建立的 n 条 TCP 连接"""
     return net.recent(n)
@@ -216,43 +217,43 @@ async def network_recent(n: int = Query(5, ge=1, le=100)) -> List[Dict[str, Any]
 
 # =============== 系统命令执行接口 ===============
 
-@app.get("/metrics/command/top")
+@app.post("/metrics/command/top")
 async def get_top():
     """获取 top 命令输出"""
     return {"output": system_command.collect_top()}
 
 
-@app.get("/metrics/command/vmstat")
+@app.post("/metrics/command/vmstat")
 async def get_vmstat():
     """获取 vmstat 命令输出"""
     return {"output": system_command.collect_vmstat()}
 
 
-@app.get("/metrics/command/pidstat")
+@app.post("/metrics/command/pidstat")
 async def get_pidstat():
     """获取 pidstat 命令输出"""
     return {"output": system_command.collect_pidstat()}
 
 
-@app.get("/metrics/command/free")
+@app.post("/metrics/command/free")
 async def get_free():
     """获取 free 命令输出"""
     return {"output": system_command.collect_free()}
 
 
-@app.get("/metrics/command/df")
+@app.post("/metrics/command/df")
 async def get_df():
     """获取 df 命令输出"""
     return {"output": system_command.collect_df()}
 
 
-@app.get("/metrics/command/iostat")
+@app.post("/metrics/command/iostat")
 async def get_iostat():
     """获取 iostat 命令输出"""
     return {"output": system_command.collect_iostat()}
 
 
-@app.get("/metrics/command/ethtool")
+@app.post("/metrics/command/ethtool")
 async def get_ethtool(interface: str = Query("eth0")):
     """获取指定网卡的 ethtool 信息"""
     return {"output": system_command.collect_ethtool(interface)}
@@ -260,19 +261,19 @@ async def get_ethtool(interface: str = Query("eth0")):
 
 # =============== 日志读取接口 ===============
 
-@app.get("/metrics/logs/system")
+@app.post("/metrics/logs/system")
 async def get_system_log(lines: int = Query(100, ge=1, le=1000)):
     """获取最近 lines 条系统日志（journalctl）"""
     return {"output": log_reader.collect_system_log(lines)}
 
 
-@app.get("/metrics/logs/kernel")
+@app.post("/metrics/logs/kernel")
 async def get_kernel_log(lines: int = Query(100, ge=1, le=1000)):
     """获取最近 lines 条内核日志（dmesg）"""
     return {"output": log_reader.collect_kernel_log(lines)}
 
 
-@app.get("/metrics/logs/app")
+@app.post("/metrics/logs/app")
 async def get_app_log(
         path: str = Query(..., min_length=1),
         lines: int = Query(100, ge=1, le=1000)
@@ -283,13 +284,13 @@ async def get_app_log(
 
 # =============== 高级监控接口 ===============
 
-@app.get("/metrics/senior/package")
+@app.post("/metrics/senior/package")
 async def package_status(pkg: str = Query(..., min_length=1)) -> Dict[str, Any]:
     """查询软件包安装状态及版本信息"""
     return senior.get_package_status(pkg)
 
 
-@app.get("/metrics/senior/stack/native")
+@app.post("/metrics/senior/stack/native")
 async def native_stack(pid: int = Query(..., ge=1)) -> Dict[str, Any]:
     """获取指定进程的原生（用户态）调用栈"""
     output = senior.get_native_stack(pid)
@@ -298,7 +299,7 @@ async def native_stack(pid: int = Query(..., ge=1)) -> Dict[str, Any]:
     return {"pid": pid, "stack": output}
 
 
-@app.get("/metrics/senior/stack/kernel")
+@app.post("/metrics/senior/stack/kernel")
 async def kernel_stack(pid: int = Query(..., ge=1)) -> Dict[int, List[str]]:
     """获取指定进程所有线程的内核态调用栈"""
     stacks = senior.get_kernel_stack(pid)
@@ -307,7 +308,7 @@ async def kernel_stack(pid: int = Query(..., ge=1)) -> Dict[int, List[str]]:
     return stacks
 
 
-@app.get("/")
+@app.post("/")
 async def root():
     """根路径：运行状态提示"""
     return {"message": "System Monitor is running. Try GET /metrics"}

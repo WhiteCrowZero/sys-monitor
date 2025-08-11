@@ -105,6 +105,7 @@ async def send_info_email(
 ):
     subject = "系统信息报告 - " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     data = get_os_info()
+    data["cpu"]["cpu_percent_per_core"] = data["cpu"]["cpu_percent_per_core"][:9]
     charts = generate_all_chart(data, CHART_OUTPUT_PATH)
     with open(os.path.join(TEMPLATE_HTML_PATH, "info.html"), "r", encoding="utf-8") as f:
         tpl = Template(f.read())
